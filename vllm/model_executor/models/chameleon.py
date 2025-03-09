@@ -1046,9 +1046,9 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal,
 
         # Disallow image tokens which does not include special
         # begin-image and end-image tokens
-        if logits is not None:
-            image_tokens = self.model.vocabulary_mapping.image_tokens
-            logits[:, image_tokens] = torch.finfo(logits.dtype).min
+        # if logits is not None:
+        #     image_tokens = self.model.vocabulary_mapping.image_tokens
+        #     logits[:, image_tokens] = torch.finfo(logits.dtype).min
 
         return logits
 
