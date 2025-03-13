@@ -226,7 +226,7 @@ from vllm.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsW8A8Fp8)
 from vllm.model_executor.layers.quantization.fp8 import Fp8LinearMethod
 from vllm.model_executor.layers.quantization.utils.fp8_utils import (
-    apply_fp8_linear_generic, current_platform_fp8_dtype, is_fp8)
+    Fp8LinearGenericOp, is_fp8)
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
     scaled_quantize)
 from vllm.model_executor.layers.rotary_embedding import (
@@ -1057,6 +1057,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
         self.kv_b_proj = kv_b_proj
         self.o_proj = o_proj
         self.triton_fa_func = triton_attention
+        self.fp8_linear_generic = Fp8LinearGenericOp()
 
         # Handle the differences between the flash_attn_varlen from flash_attn
         # and the one from vllm_flash_attn. The former is used on RoCM and the
@@ -1071,7 +1072,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
     def _v_up_proj_and_o_proj(self, x):
         if envs.VLLM_MLA_PERFORM_MATRIX_ABSORPTION:
             if is_fp8(self.W_UV_O):
-                output_parallel = apply_fp8_linear_generic(
+                output_parallel = self.fp8_linear_generic.apply(
                     x.flatten(start_dim=1), self.W_UV_O, self.W_UV_O_scales,
                     self.reqaunt_input_group_shape,
                     self.reqaunt_weight_group_shape)
@@ -1091,7 +1092,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
     def _q_proj_and_k_up_proj(self, x):
         if envs.VLLM_MLA_PERFORM_MATRIX_ABSORPTION:
             if is_fp8(self.W_Q_UK):
-                return apply_fp8_linear_generic(
+                return self.fp8_linear_generic.apply(
                     x, self.W_Q_UK, self.W_Q_UK_scales,
                     self.reqaunt_input_group_shape,
                     self.reqaunt_weight_group_shape).view(
@@ -1237,7 +1238,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
                 W_Q_UK, W_Q_UK_scales = scaled_quantize(
                     W_Q_UK,
                     self.reqaunt_weight_group_shape,
-                    quant_dtype=current_platform_fp8_dtype)
+                    quant_dtype=current_platform.fp8_dtype())
                 # For FP8 save the transpose so we can use
                 # `apply_w8a8_block_fp8_linear` directly
                 self.W_Q_UK = W_Q_UK.T.contiguous()
@@ -1254,7 +1255,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
                 W_UV_O, W_UV_O_scales = scaled_quantize(
                     W_UV_O,
                     self.reqaunt_weight_group_shape,
-                    quant_dtype=current_platform_fp8_dtype)
+                    quant_dtype=current_platform.fp8_dtype())
                 # For FP8 save the transpose so we can use
                 # `apply_w8a8_block_fp8_linear` directly
                 self.W_UV_O = W_UV_O.T.contiguous()
@@ -1326,21 +1327,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
                                                [0, q.shape[-1] - v.shape[-1]],
                                                value=0)
 
-            if is_hip and envs.VLLM_USE_TRITON_FLASH_ATTN:
-                attn_output, attn_softmax_lse = self.triton_fa_func(
-                    q,
-                    k,
-                    v_padded,
-                    None,
-                    prefill_metadata.query_start_loc,
-                    prefill_metadata.context_chunk_cu_seq_lens[i],
-                    prefill_metadata.max_query_len,
-                    prefill_metadata.context_chunk_max_seq_lens[i],
-                    False,  # causal
-                    self.scale,
-                    None,  # attn_mask is None unless applying ALiBi mask
-                )
-            elif is_vllm_fa:
+            if is_vllm_fa:
                 attn_output, attn_softmax_lse = self.flash_attn_varlen_func(
                     q=q,
                     k=k,
@@ -1415,7 +1402,7 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
         v_padded = torch.nn.functional.pad(v, [0, q.shape[-1] - v.shape[-1]],
                                            value=0)
 
-        if is_hip and envs.VLLM_USE_TRITON_FLASH_ATTN:
+        if is_hip and envs.VLLM_USE_TRITON_FLASH_ATTN and not has_context:
             output = self.triton_fa_func(
                 q,
                 k,
