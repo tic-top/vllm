@@ -37,7 +37,7 @@ from vllm.model_executor.layers.quantization import QuantizationConfig
 from vllm.model_executor.layers.rotary_embedding import get_rope
 from vllm.model_executor.layers.sampler import SamplerOutput, get_sampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
-    VocabParallelEmbedding)
+    VocabParallelEmbedding, ParallelLMHead)
 from vllm.model_executor.model_loader.weight_utils import default_weight_loader
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sequence import IntermediateTensors
@@ -305,10 +305,13 @@ class GemmaModel(nn.Module):
         else:
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
-        for layer in self.layers[self.start_layer:self.end_layer]:
+        for i in range(self.start_layer, self.end_layer):
+            layer = self.layers[i]
             hidden_states, residual = layer(
                 positions,
                 hidden_states,
+                kv_caches[i - self.start_layer],
+                attn_metadata,
                 residual,
             )
         if not get_pp_group().is_last_rank:
@@ -340,14 +343,21 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         lora_config = vllm_config.lora_config
 
         self.config = config
-        # currently all existing Gemma models have `tie_word_embeddings` enabled
-        assert config.tie_word_embeddings
+        self.tied_weight = config.tie_word_embeddings
         self.lora_config = lora_config
 
         self.quant_config = quant_config
         self.model = GemmaModel(vllm_config=vllm_config,
                                 prefix=maybe_prefix(prefix, "model"))
         self.logits_processor = LogitsProcessor(config.vocab_size)
+        if self.config.tied_weight == False:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                org_num_embeddings=config.vocab_size,
+                quant_config=quant_config,
+                prefix=f"{prefix}.lm_head",
+            )
         self.sampler = get_sampler()
         self.make_empty_intermediate_tensors = (
             self.model.make_empty_intermediate_tensors)
@@ -371,8 +381,12 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        logits = self.logits_processor(self.model.embed_tokens, hidden_states,
+        if self.tied_weight:
+            logits = self.logits_processor(self.model.embed_tokens, hidden_states,
                                        sampling_metadata)
+        else:
+            logits = self.logits_processor(self.lm_head, hidden_states,
+                                        sampling_metadata)
         return logits
 
     def sample(
@@ -412,7 +426,7 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
             else:
                 # lm_head is not used in vllm as it is tied with embed_token.
                 # To prevent errors, skip loading lm_head.weight.
-                if "lm_head.weight" in name:
+                if self.tied_weight and "lm_head.weight" in name:
                     continue
                 # Skip loading extra bias for GPTQ models.
                 if name.endswith(".bias") and name not in params_dict:
