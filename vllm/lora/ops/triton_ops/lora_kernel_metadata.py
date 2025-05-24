@@ -4,7 +4,7 @@ LoRA kernels metadata preparation utilities.
 """
 
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Union
 
 import torch
 
@@ -111,7 +111,7 @@ class LoRAKernelMeta:
 
         # active_lora_ids, num_tokens_per_lora
         lora_ids, num_tokens_per_lora = torch.unique(token_lora_mapping,
-                                                     sorted=False,
+                                                     sorted=True,
                                                      return_counts=True)
         self.active_lora_ids[:lora_ids.size(0)].copy_(lora_ids,
                                                       non_blocking=True)
@@ -125,7 +125,7 @@ class LoRAKernelMeta:
 
     def meta_args(
         self, token_nums: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
                torch.Tensor, torch.Tensor]:
         """
         This function returns the kernel metadata required for the current

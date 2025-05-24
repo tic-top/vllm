@@ -2,7 +2,6 @@
 
 import tempfile
 from collections import OrderedDict
-from typing import TypedDict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,28 +23,6 @@ from vllm.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 from vllm.model_executor.model_loader import get_model
 from vllm.model_executor.models.interfaces import SupportsLoRA
 from vllm.platforms import current_platform
-
-
-class ContextIDInfo(TypedDict):
-    lora_id: int
-    context_length: str
-
-
-class ContextInfo(TypedDict):
-    lora: str
-    context_length: str
-
-
-LONG_LORA_INFOS: list[ContextIDInfo] = [{
-    "lora_id": 1,
-    "context_length": "16k",
-}, {
-    "lora_id": 2,
-    "context_length": "16k",
-}, {
-    "lora_id": 3,
-    "context_length": "32k",
-}]
 
 
 @pytest.fixture()
@@ -70,7 +47,7 @@ def dist_init():
     temp_file = tempfile.mkstemp()[1]
 
     backend = "nccl"
-    if current_platform.is_cpu():
+    if current_platform.is_cpu() or current_platform.is_tpu():
         backend = "gloo"
 
     init_distributed_environment(world_size=1,
@@ -163,6 +140,12 @@ def dummy_model_gate_up() -> nn.Module:
 
 
 @pytest.fixture(scope="session")
+def llama_2_7b_base_huggingface_id():
+    # used as a base model for testing with sql lora adapter
+    return "meta-llama/Llama-2-7b-hf"
+
+
+@pytest.fixture(scope="session")
 def sql_lora_huggingface_id():
     # huggingface repo id is used to test lora runtime downloading.
     return "yard1/llama-2-7b-sql-lora-test"
@@ -219,6 +202,12 @@ def minicpmv_lora_files():
 @pytest.fixture(scope="session")
 def qwen2vl_lora_files():
     return snapshot_download(repo_id="jeeejeee/qwen2-vl-lora-pokemon")
+
+
+@pytest.fixture(scope="session")
+def qwen25vl_base_huggingface_id():
+    # used as a base model for testing with qwen25vl lora adapter
+    return "Qwen/Qwen2.5-VL-3B-Instruct"
 
 
 @pytest.fixture(scope="session")
@@ -279,3 +268,15 @@ def run_with_both_engines_lora(request, monkeypatch):
         monkeypatch.setenv('VLLM_USE_V1', '0')
 
     yield
+
+
+@pytest.fixture
+def reset_default_device():
+    """
+    Some tests, such as `test_punica_ops.py`, explicitly set the
+    default device, which can affect subsequent tests. Adding this fixture
+    helps avoid this problem.
+    """
+    original_device = torch.get_default_device()
+    yield
+    torch.set_default_device(original_device)
