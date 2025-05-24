@@ -264,6 +264,16 @@ class GemmaModel(nn.Module):
 
         self.config = config
 
+        if not self.config.tie_word_embeddings:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                org_num_embeddings=config.vocab_size,
+                quant_config=quant_config,
+                prefix=f"{prefix}.lm_head",
+            )
+            print(f"As config.tie_word_embeddings is False, lm_head is created.")
+
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
             config.hidden_size,
