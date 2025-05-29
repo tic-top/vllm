@@ -264,16 +264,6 @@ class GemmaModel(nn.Module):
 
         self.config = config
 
-        if not self.config.tie_word_embeddings:
-            self.lm_head = ParallelLMHead(
-                config.vocab_size,
-                config.hidden_size,
-                org_num_embeddings=config.vocab_size,
-                quant_config=quant_config,
-                prefix=f"{prefix}.lm_head",
-            )
-            print(f"As config.tie_word_embeddings is False, lm_head is created.")
-
         self.embed_tokens = VocabParallelEmbedding(
             config.vocab_size,
             config.hidden_size,
@@ -391,6 +381,17 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
         self.config = config
         self.tied_weight = config.tie_word_embeddings
+        
+        if not self.tied_weight:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                org_num_embeddings=config.vocab_size,
+                quant_config=quant_config,
+                prefix=prefix
+            )
+            print(f"As config.tie_word_embeddings is False, lm_head is created.")
+
         self.lora_config = lora_config
 
         self.quant_config = quant_config
