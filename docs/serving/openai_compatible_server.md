@@ -8,7 +8,9 @@ vLLM provides an HTTP server that implements OpenAI's [Completions API](https://
 In your terminal, you can [install](../getting_started/installation/README.md) vLLM, then start the server with the [`vllm serve`][serve-args] command. (You can also use our [Docker][deployment-docker] image.)
 
 ```bash
-vllm serve NousResearch/Meta-Llama-3-8B-Instruct --dtype auto --api-key token-abc123
+vllm serve NousResearch/Meta-Llama-3-8B-Instruct \
+  --dtype auto \
+  --api-key token-abc123
 ```
 
 To call the server, in your preferred text editor, create a script that uses an HTTP client. Include any messages that you want to send to the model. Then run that script. Below is an example script using the [official OpenAI Python client](https://github.com/openai/openai-python).
@@ -34,7 +36,7 @@ print(completion.choices[0].message)
     vLLM supports some parameters that are not supported by OpenAI, `top_k` for example.
     You can pass these parameters to vLLM using the OpenAI client in the `extra_body` parameter of your requests, i.e. `extra_body={"top_k": 50}` for `top_k`.
 
-!!! warning
+!!! important
     By default, the server applies `generation_config.json` from the Hugging Face model repository if it exists. This means the default values of certain sampling parameters can be overridden by those recommended by the model creator.
 
     To disable this behavior, please pass `--generation-config vllm` when launching the server.
@@ -243,10 +245,12 @@ and passing a list of `messages` in the request. Refer to the examples below for
 
     ```bash
     vllm serve TIGER-Lab/VLM2Vec-Full --task embed \
-      --trust-remote-code --max-model-len 4096 --chat-template examples/template_vlm2vec.jinja
+      --trust-remote-code \
+      --max-model-len 4096 \
+      --chat-template examples/template_vlm2vec.jinja
     ```
 
-    !!! warning
+    !!! important
         Since VLM2Vec has the same model architecture as Phi-3.5-Vision, we have to explicitly pass `--task embed`
         to run this model in embedding mode instead of text generation mode.
 
@@ -285,16 +289,18 @@ and passing a list of `messages` in the request. Refer to the examples below for
 
     ```bash
     vllm serve MrLight/dse-qwen2-2b-mrl-v1 --task embed \
-      --trust-remote-code --max-model-len 8192 --chat-template examples/template_dse_qwen2_vl.jinja
+      --trust-remote-code \
+      --max-model-len 8192 \
+      --chat-template examples/template_dse_qwen2_vl.jinja
     ```
 
-    !!! warning
+    !!! important
         Like with VLM2Vec, we have to explicitly pass `--task embed`.
 
         Additionally, `MrLight/dse-qwen2-2b-mrl-v1` requires an EOS token for embeddings, which is handled
         by a custom chat template: <gh-file:examples/template_dse_qwen2_vl.jinja>
 
-    !!! warning
+    !!! important
         `MrLight/dse-qwen2-2b-mrl-v1` requires a placeholder image of the minimum image size for text query embeddings. See the full code
         example below for details.
 

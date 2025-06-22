@@ -27,7 +27,8 @@ vLLM currently supports the following reasoning models:
 To use reasoning models, you need to specify the `--reasoning-parser` flags when making a request to the chat completion endpoint. The `--reasoning-parser` flag specifies the reasoning parser to use for extracting reasoning content from the model output.
 
 ```bash
-vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --reasoning-parser deepseek_r1
+vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B \
+    --reasoning-parser deepseek_r1
 ```
 
 Next, make a request to the model that should return the reasoning content in the response.
@@ -140,51 +141,6 @@ for chunk in stream:
 ```
 
 Remember to check whether the `reasoning_content` exists in the response before accessing it. You could checkout the [example](https://github.com/vllm-project/vllm/blob/main/examples/online_serving/openai_chat_completion_with_reasoning_streaming.py).
-
-## Structured output
-
-The reasoning content is also available in the structured output. The structured output engine like `xgrammar` will use the reasoning content to generate structured output. It is only supported in v0 engine now.
-
-```bash
-vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --reasoning-parser deepseek_r1
-```
-
-The following is an example client:
-
-```python
-from openai import OpenAI
-from pydantic import BaseModel
-
-# Modify OpenAI's API key and API base to use vLLM's API server.
-openai_api_key = "EMPTY"
-openai_api_base = "http://localhost:8000/v1"
-
-client = OpenAI(
-    api_key=openai_api_key,
-    base_url=openai_api_base,
-)
-
-models = client.models.list()
-model = models.data[0].id
-
-class People(BaseModel):
-    name: str
-    age: int
-
-json_schema = People.model_json_schema()
-
-prompt = ("Generate a JSON with the name and age of one random person.")
-completion = client.chat.completions.create(
-    model=model,
-    messages=[{
-        "role": "user",
-        "content": prompt,
-    }],
-    extra_body={"guided_json": json_schema},
-)
-print("reasoning_content: ", completion.choices[0].message.reasoning_content)
-print("content: ", completion.choices[0].message.content)
-```
 
 ## Tool Calling
 
