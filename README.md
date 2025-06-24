@@ -87,6 +87,7 @@ Find the full list of supported models [here](https://docs.vllm.ai/en/latest/mod
 Install vLLM with `pip` or [from source](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/index.html#build-wheel-from-source):
 
 ```bash
+VLLM_USE_PRECOMPILED=1 pip install --editable .
 pip install vllm
 ```
 
