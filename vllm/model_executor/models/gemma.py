@@ -381,7 +381,17 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
         self.config = config
         # currently all existing Gemma models have `tie_word_embeddings` enabled
-        assert config.tie_word_embeddings
+        if not config.tie_word_embeddings:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                org_num_embeddings=config.vocab_size,
+                quant_config=quant_config,
+                prefix=f"{prefix}.lm_head",
+            )
+            print(f"As config.tie_word_embeddings is False, lm_head is created.")
+
+
         self.lora_config = lora_config
 
         self.quant_config = quant_config
@@ -411,8 +421,12 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        logits = self.logits_processor(self.model.embed_tokens, hidden_states,
+        if self.config.tie_word_embeddings:
+            logits = self.logits_processor(self.model.embed_tokens, hidden_states,
                                        sampling_metadata)
+        else:
+            logits = self.logits_processor(self.lm_head, hidden_states,
+                                        sampling_metadata)
         return logits
 
     def sample(
